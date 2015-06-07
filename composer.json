@@ -1,7 +1,7 @@
 {
     "name": "deviantart/oauth2-deviantart",
     "description": "DeviantArt OAuth 2.0 Client Provider for The PHP League OAuth2-Client",
-    "license": "MIT",
+    "license": "BSD",
     "authors": [
         {
             "name": "Keith Pope",
