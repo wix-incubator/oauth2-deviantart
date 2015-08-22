@@ -16,7 +16,6 @@ class DeviantArtTest extends \PHPUnit_Framework_TestCase
             'clientId'     => 'client_id',
             'clientSecret' => 'secret',
             'redirectUri'  => 'redirect_uri',
-            'scopes'       => ['scope1', 'scope2'],
             'userExpandOptions' => ['user.details', 'user.geo', 'user.profile', 'user.stats'],
         ]);
     }
@@ -25,6 +24,7 @@ class DeviantArtTest extends \PHPUnit_Framework_TestCase
     {
         $url = $this->provider->getAuthorizationUrl([
             'state' => 'state',
+            'scope' => 'scope1 scope2',
         ]);
         $parsed = parse_url($url);
         parse_str($parsed['query'], $query);
@@ -40,26 +40,25 @@ class DeviantArtTest extends \PHPUnit_Framework_TestCase
 
     public function testUsesCorrectTokenUri()
     {
-        $url = $this->provider->urlAccessToken();
+        $url = $this->provider->getBaseAccessTokenUrl([]);
         $parsed = parse_url($url);
         $this->assertEquals('/oauth2/token', $parsed['path'], 'Should use /oauth2/token');
         $this->assertContains('deviantart.com', $parsed['host'], 'Should use da domain');
     }
 
-    public function testUsesCorrectUserDetailsUri()
+    public function testUsesCorrectResourceOwnerDetailsUrl()
     {
         $token = new AccessToken(['access_token' => 'blah']);
 
-        $url = $this->provider->urlUserDetails($token);
+        $url = $this->provider->getResourceOwnerDetailsUrl($token);
         $parsed = parse_url($url);
 
         $this->assertEquals('/api/v1/oauth2/user/whoami', $parsed['path'], 'Should use /api/v1/oauth2/user/whoami');
     }
 
-    public function testCanFetchUserDetails()
+    public function testCanGetResourceOwner()
     {
-        $getResponse = m::mock('Guzzle\Http\Message\Response');
-        $getResponse->shouldReceive('getBody')->andReturn(
+        $userinfo =
 '{
     "userid": "C69E67CC-61A2-C16B-9C0A-D9989349AC0B",
     "username": "reactortest3",
@@ -138,18 +137,32 @@ class DeviantArtTest extends \PHPUnit_Framework_TestCase
         "watchers": 0,
         "friends": 0
     }
-}'
-        );
+}';
 
-        $client = m::mock('Guzzle\Service\Client');
-        $client->shouldIgnoreMissing();
-        $client->shouldReceive('get->send')->andReturn($getResponse);
+        $postResponse = m::mock('Psr\Http\Message\ResponseInterface');
+        $postResponse->shouldReceive('getBody')->andReturn('access_token=mock_access_token&expires=3600&refresh_token=mock_refresh_token}');
+        $postResponse->shouldReceive('getHeader')->andReturn(['content-type' => 'application/x-www-form-urlencoded']);
+        $postResponse->shouldReceive('getStatusCode')->andReturn(200);
+        $userResponse = m::mock('Psr\Http\Message\ResponseInterface');
+        $userResponse->shouldReceive('getBody')->andReturn($userinfo);
+        $userResponse->shouldReceive('getHeader')->andReturn(['content-type' => 'json']);
+        $userResponse->shouldReceive('getStatusCode')->andReturn(200);
 
+        $client = m::mock('GuzzleHttp\ClientInterface');
+        $client->shouldReceive('send')
+            ->times(2)
+            ->andReturn($postResponse, $userResponse);
         $this->provider->setHttpClient($client);
-        $user = $this->provider->getUserDetails(new AccessToken(['access_token' => 'blah']));
+
+        $token = $this->provider->getAccessToken('authorization_code', ['code' => 'mock_authorization_code']);
+        $user = $this->provider->getResourceOwner($token);
 
         $this->assertInstanceOf('DeviantArt\OAuth2\Client\Entity\Deviant', $user, 'Should get instance of Deviant');
         $this->assertEquals('reactortest3', $user->username, 'Username should be set');
         $this->assertEquals('C69E67CC-61A2-C16B-9C0A-D9989349AC0B', $user->userid, 'Userid should be set');
+        $this->assertNotEmpty($user->details, 'Should set details');
+        $this->assertNotEmpty($user->geo, 'Should set geo');
+        $this->assertNotEmpty($user->stats, 'Should set stats');
+        $this->assertNotEmpty($user->profile, 'Should set profile');
     }
 }

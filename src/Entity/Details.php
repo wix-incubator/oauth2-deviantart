@@ -8,13 +8,21 @@ class Details extends Entity
     protected $age;
     protected $joinDate;
 
-    public static function factory(\stdClass $data)
+    public static function factory(array $data)
     {
         return new Details(
-            $data->sex,
-            $data->age,
-            $data->joindate
+            $data['sex'],
+            $data['age'],
+            $data['joindate']
         );
+    }
+
+    public function toArray() {
+        return [
+            'sex' => $this->sex,
+            'age' => $this->age,
+            'joindate' => $this->joinDate,
+        ];
     }
 
     public function __construct($sex, $age, $joinDate)
